@@ -1,98 +1,281 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
-
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
+import { NoteCard } from '@/components/note-card';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+import { Colors } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Note } from '@/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useEffect, useState } from 'react';
+import { Alert, Modal, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 
-export default function HomeScreen() {
+const NOTES_KEY = '@notes';
+const NOTE_COLORS = ['#fff4b3', '#b3e5fc', '#c8e6c9', '#ffccbc', '#e1bee7'];
+
+export default function NotesScreen() {
+  const [notes, setNotes] = useState<Note[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [currentNote, setCurrentNote] = useState<Note | null>(null);
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [selectedColor, setSelectedColor] = useState(NOTE_COLORS[0]);
+  const colorScheme = useColorScheme();
+
+  useEffect(() => {
+    loadNotes();
+  }, []);
+
+  const loadNotes = async () => {
+    try {
+      const stored = await AsyncStorage.getItem(NOTES_KEY);
+      if (stored) {
+        setNotes(JSON.parse(stored));
+      }
+    } catch (error) {
+      console.error('Error loading notes:', error);
+    }
+  };
+
+  const saveNotes = async (newNotes: Note[]) => {
+    try {
+      await AsyncStorage.setItem(NOTES_KEY, JSON.stringify(newNotes));
+      setNotes(newNotes);
+    } catch (error) {
+      console.error('Error saving notes:', error);
+    }
+  };
+
+  const handleAddNote = () => {
+    setCurrentNote(null);
+    setTitle('');
+    setContent('');
+    setSelectedColor(NOTE_COLORS[0]);
+    setModalVisible(true);
+  };
+
+  const handleEditNote = (note: Note) => {
+    setCurrentNote(note);
+    setTitle(note.title);
+    setContent(note.content);
+    setSelectedColor(note.color || NOTE_COLORS[0]);
+    setModalVisible(true);
+  };
+
+  const handleSaveNote = () => {
+    if (!title.trim()) {
+      Alert.alert('Error', 'Please enter a title');
+      return;
+    }
+
+    const now = new Date().toISOString();
+    
+    if (currentNote) {
+      // Update existing note
+      const updatedNotes = notes.map(note =>
+        note.id === currentNote.id
+          ? { ...note, title, content, updatedAt: now, color: selectedColor }
+          : note
+      );
+      saveNotes(updatedNotes);
+    } else {
+      // Create new note
+      const newNote: Note = {
+        id: Date.now().toString(),
+        title,
+        content,
+        createdAt: now,
+        updatedAt: now,
+        color: selectedColor,
+      };
+      saveNotes([newNote, ...notes]);
+    }
+    
+    setModalVisible(false);
+  };
+
+  const handleDeleteNote = (id: string) => {
+    Alert.alert(
+      'Delete Note',
+      'Are you sure you want to delete this note?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            const filtered = notes.filter(note => note.id !== id);
+            saveNotes(filtered);
+          },
+        },
+      ]
+    );
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <ThemedView style={styles.container}>
+      <View style={styles.header}>
+        <ThemedText type="title">My Notes</ThemedText>
+        <TouchableOpacity onPress={handleAddNote} style={styles.addButton}>
+          <IconSymbol name="plus.circle.fill" size={32} color={Colors[colorScheme ?? 'light'].tint} />
+        </TouchableOpacity>
+      </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        {notes.length === 0 ? (
+          <ThemedView style={styles.emptyContainer}>
+            <IconSymbol name="note.text" size={64} color="#ccc" />
+            <ThemedText style={styles.emptyText}>No notes yet</ThemedText>
+            <ThemedText style={styles.emptySubtext}>Tap + to create your first note</ThemedText>
+          </ThemedView>
+        ) : (
+          notes.map(note => (
+            <NoteCard
+              key={note.id}
+              note={note}
+              onPress={() => handleEditNote(note)}
+              onDelete={() => handleDeleteNote(note.id)}
+            />
+          ))
+        )}
+      </ScrollView>
+
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <ThemedView style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <TouchableOpacity onPress={() => setModalVisible(false)}>
+              <ThemedText style={styles.cancelBtn}>Cancel</ThemedText>
+            </TouchableOpacity>
+            <ThemedText type="subtitle">
+              {currentNote ? 'Edit Note' : 'New Note'}
+            </ThemedText>
+            <TouchableOpacity onPress={handleSaveNote}>
+              <ThemedText style={styles.saveBtn}>Save</ThemedText>
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.colorPicker}>
+            {NOTE_COLORS.map(color => (
+              <TouchableOpacity
+                key={color}
+                onPress={() => setSelectedColor(color)}
+                style={[
+                  styles.colorOption,
+                  { backgroundColor: color },
+                  selectedColor === color && styles.selectedColor,
+                ]}
+              />
+            ))}
+          </View>
+
+          <TextInput
+            style={styles.titleInput}
+            placeholder="Note title"
+            value={title}
+            onChangeText={setTitle}
+            placeholderTextColor="#999"
+          />
+          
+          <TextInput
+            style={styles.contentInput}
+            placeholder="Start typing..."
+            value={content}
+            onChangeText={setContent}
+            multiline
+            textAlignVertical="top"
+            placeholderTextColor="#999"
+          />
+        </ThemedView>
+      </Modal>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    paddingTop: 60,
+  },
+  header: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    gap: 8,
+    paddingHorizontal: 20,
+    marginBottom: 20,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  addButton: {
+    padding: 4,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  scrollView: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 100,
+  },
+  emptyText: {
+    fontSize: 20,
+    marginTop: 16,
+    opacity: 0.6,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    marginTop: 8,
+    opacity: 0.4,
+  },
+  modalContainer: {
+    flex: 1,
+    paddingTop: 60,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  cancelBtn: {
+    color: '#ff3b30',
+    fontSize: 16,
+  },
+  saveBtn: {
+    color: '#007aff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  colorPicker: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+    marginBottom: 20,
+  },
+  colorOption: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  selectedColor: {
+    borderColor: '#007aff',
+    borderWidth: 3,
+  },
+  titleInput: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    color: '#000',
+  },
+  contentInput: {
+    flex: 1,
+    fontSize: 16,
+    paddingHorizontal: 20,
+    color: '#000',
   },
 });
